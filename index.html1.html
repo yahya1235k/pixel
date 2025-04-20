@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>مولد فن البيكسل الذهبي</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI'; display: flex; height: 100vh; background: #1e1e1e; color: white; direction: rtl; }
+    #controls { width: 360px; padding: 20px; background: #121212; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    label { font-size: 14px; color: #ccc; }
+    input, select, button { margin-top: 5px; padding: 6px; font-size: 14px; width: 100%; }
+    button { background-color: #007bff; color: white; border: none; cursor: pointer; transition: 0.3s; }
+    button:hover { background-color: #0056b3; }
+    #preview { flex-grow: 1; display: flex; justify-content: center; align-items: center; background: #1a1a1a; overflow: auto; }
+    canvas { max-width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <h2>مولد فن البيكسل الذهبي</h2>
+    <label>تحميل صورة <input type="file" id="imgInput" accept="image/*" /></label>
+    <label>نوع الشكل
+      <select id="shapeType">
+        <option value="circle">دائرة</option>
+        <option value="square">مربع</option>
+        <option value="plus">زائد</option>
+        <option value="flower">زهرة</option>
+        <option value="abstract">عشوائي</option>
+        <option value="pixelGrid">شبكة بيكسل</option>
+        <option value="lego3d">ليجو واقعي</option>
+        <option value="retro">قديم</option>
+        <option value="puzzle">بازل</option>
+        <option value="heatmap">خريطة حرارية</option>
+        <option value="waveTiles">مربعات متموجة</option>
+        <option value="hatchLines">خطوط مائلة</option>
+      </select>
+    </label><label>Padding <input type="range" id="paddingSlider" min="0" max="10" value="2" /></label>
+<label>حجم الخطوة <input type="range" id="stepSlider" min="5" max="60" value="20" /></label>
+<label>شدة الإضاءة <input type="range" id="brightSlider" min="0" max="2" step="0.1" value="1" /></label>
+<label>التباين <input type="range" id="contrastSlider" min="0.5" max="2" step="0.1" value="1" /></label>
+<label>الشفافية <input type="range" id="opacitySlider" min="0.1" max="1" step="0.1" value="1" /></label>
+<label>عدد بتلات الزهرة <input type="number" id="petalCount" min="3" max="12" value="6" /></label>
+<label><input type="checkbox" id="useGradient" checked /> استخدام تدرج لوني</label>
+<label><input type="checkbox" id="removeBg" /> إزالة الخلفية البيضاء</label>
+<label><input type="checkbox" id="waveEffect" /> تأثير موجة</label>
+<label><input type="checkbox" id="randomMotion" /> حركة عشوائية</label>
+<label><input type="checkbox" id="addNoise" /> إضافة نويز</label>
+<label><input type="checkbox" id="invertColors" /> عكس الألوان</label>
+<label>الألوان
+  <input type="color" id="colorLight" value="#cccccc" />
+  <input type="color" id="colorNormal" value="#888888" />
+  <input type="color" id="colorDark" value="#444444" />
+</label>
+<button onclick="saveCanvas(canvas, 'pixel-art', 'png')">تحميل PNG</button>
+<button onclick="startRecording()">تسجيل فيديو</button>
+<button onclick="resetControls()">إعادة الضبط</button>
+</div>
+<div id="preview"></div>
+  <script>let img, canvas, recorder, chunks = [];
+
+    function setup() {
+      canvas = createCanvas(1000, 1000);
+      canvas.parent("preview");
+      noLoop();
+    
+      document.getElementById('imgInput').addEventListener('change', handleImageUpload);
+    
+      const ids = [
+        'stepSlider','brightSlider','contrastSlider','opacitySlider','petalCount','paddingSlider',
+        'shapeType','useGradient','removeBg','waveEffect','randomMotion','addNoise','invertColors',
+        'colorLight','colorNormal','colorDark'
+      ];
+    
+      ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', () => redraw());
+      });
+    }
+    
+    function draw() {
+      if (!img) return;
+      const get = id => document.getElementById(id);
+    
+      background(30);
+      let step = +get('stepSlider').value;
+      let padding = +get('paddingSlider').value;
+      let contrast = +get('contrastSlider').value;
+      let brightMult = +get('brightSlider').value;
+      let opacity = +get('opacitySlider').value;
+      let petals = +get('petalCount').value;
+      let invert = get('invertColors').checked;
+      let removeBg = get('removeBg').checked;
+      let wave = get('waveEffect').checked;
+      let rand = get('randomMotion').checked;
+      let addNoise = get('addNoise').checked;
+      let shape = get('shapeType').value;
+      let useGrad = get('useGradient').checked;
+      let cLight = color(get('colorLight').value);
+      let cNormal = color(get('colorNormal').value);
+      let cDark = color(get('colorDark').value);
+    
+      img.resize(width, height);
+      img.loadPixels();
+    
+      for (let y = 0; y < height; y += step) {
+        for (let x = 0; x < width; x += step) {
+          let i = 4 * (y * width + x);
+          let r = ((img.pixels[i] - 128) * contrast) + 128;
+          let g = ((img.pixels[i + 1] - 128) * contrast) + 128;
+          let b = ((img.pixels[i + 2] - 128) * contrast) + 128;
+    
+          if (invert) [r, g, b] = [255 - r, 255 - g, 255 - b];
+    
+          let colObj = color(r, g, b);
+          let s = saturation(colObj);
+          let v = brightness(colObj);
+          let bright = (r + g + b) / 3 * brightMult;
+    
+          if (removeBg && v > 97 && s < 5) continue;
+    
+          let size = map(bright, 0, 255, step, 0);
+          if (size <= 0.5) continue;
+    
+          let offset = 0;
+          if (wave) offset += sin(x * 0.05 + millis() * 0.005) * 5;
+          if (rand) offset += map(noise(x * 0.01, y * 0.01, millis() * 0.0005), 0, 1, -5, 5);
+          if (addNoise) size += random(-1, 1);
+    
+          let col = useGrad ? (bright < 85 ? cDark : bright < 170 ? cNormal : cLight) : cNormal;
+          col.setAlpha(opacity * 255);
+          fill(col);
+          noStroke();
+    
+          drawShape(shape, x, y + offset, size, petals, bright, padding);
+        }
+      }
+    }
+    
+    function drawShape(type, x, y, size, petals, bright, pad = 2) {
+      const s = size - pad;
+      switch (type) {
+        case "circle": ellipse(x, y, s); break;
+        case "square": rect(x - s / 2, y - s / 2, s, s); break;
+        case "plus":
+          rect(x - s / 8, y - s / 2, s / 4, s);
+          rect(x - s / 2, y - s / 8, s, s / 4);
+          break;
+        case "flower":
+          for (let i = 0; i < petals; i++) {
+            let angle = TWO_PI * i / petals;
+            ellipse(x + cos(angle) * s / 2, y + sin(angle) * s / 2, s / 2);
+          }
+          ellipse(x, y, s / 2); break;
+        case "abstract":
+          if (random() < 0.25) drawShape("flower", x, y, s, petals, bright);
+          else if (random() < 0.5) ellipse(x, y, s);
+          else if (random() < 0.75) rect(x - s / 2, y - s / 2, s, s);
+          else {
+            beginShape();
+            for (let a = 0; a < TWO_PI; a += PI / 3) vertex(x + cos(a) * s / 2, y + sin(a) * s / 2);
+            endShape(CLOSE);
+          }
+          break;
+        case "pixelGrid": rect(x, y, size, size); break;
+        case "lego3d":
+          push();
+          stroke(0, 40); strokeWeight(1);
+          rect(x, y, size, size);
+          fill(255, 40);
+          ellipse(x + size / 2, y + size * 0.15, size * 0.3);
+          pop();
+          break;
+        case "retro": fill(255); rect(x - s / 2, y - s / 2, s, s); break;
+        case "puzzle":
+          beginShape();
+          vertex(x, y);
+          bezierVertex(x + s * 0.2, y - s * 0.3, x + s * 0.8, y - s * 0.3, x + s, y);
+          vertex(x + s, y + s);
+          bezierVertex(x + s * 0.8, y + s * 1.3, x + s * 0.2, y + s * 1.3, x, y + s);
+          endShape(CLOSE); break;
+        case "heatmap":
+          let col = color(map(bright, 0, 255, 240, 0), map(bright, 0, 255, 0, 255), 0);
+          fill(col);
+          ellipse(x, y, s); break;
+        case "waveTiles":
+          push();
+          translate(x + s / 2, y + s / 2);
+          rotate(sin(x * 0.05 + millis() * 0.005) * 0.5);
+          rect(-s / 2, -s / 2, s, s);
+          pop();
+          break;
+        case "hatchLines":
+          strokeWeight(1); stroke(255);
+          for (let i = -s / 2; i < s / 2; i += 3) {
+            line(x + i, y - s / 2, x + i + s, y + s / 2);
+          }
+          break;
+      }
+    }
+    
+    function handleImageUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        img = loadImage(e.target.result, () => redraw());
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    function startRecording() {
+      let stream = canvas.canvas.captureStream(30);
+      recorder = new MediaRecorder(stream);
+      chunks = [];
+      recorder.ondataavailable = e => chunks.push(e.data);
+      recorder.onstop = () => {
+        let blob = new Blob(chunks, { type: 'video/webm' });
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement('a');
+        a.href = url;
+        a.download = 'pixel_art_video.webm';
+        a.click();
+      };
+      recorder.start();
+      setTimeout(() => recorder.stop(), 5000);
+    }
+    
+    function resetControls() {
+      ['stepSlider','brightSlider','contrastSlider','opacitySlider','petalCount','paddingSlider'].forEach(id =>
+        document.getElementById(id).value = document.getElementById(id).defaultValue);
+      ['useGradient','removeBg','waveEffect','randomMotion','invertColors','addNoise'].forEach(id =>
+        document.getElementById(id).checked = false);
+      ['colorLight','colorNormal','colorDark'].forEach((id, i) =>
+        document.getElementById(id).value = ['#cccccc','#888888','#444444'][i]);
+      document.getElementById('shapeType').value = 'circle';
+      redraw();
+    }
+    </script>
+    </body>
+    </html>
